@@ -88,13 +88,18 @@ func _webxr_session_failed(message: String) -> void:
 func _on_left_controller_button_released(button: String) -> void:
     print(\"Button release: \" + button)
 
+# Stwórz podobną (i podłącz ją w _ready!) dla prawego kontrolera:
 func _on_right_controller_button_released(button: String) -> void:
+    # W WebXR przycisk triggera zwykle nazywa się \"trigger_click\" lub \"ax_button\"
     if button == \"trigger_click\" and $TeleportMarker.visible:
+        # Obliczamy pozycję docelową
         var target_pos = $TeleportMarker.global_position
         
+        # Wyliczamy wektor od środka XROrigin do miejsca, gdzie fizycznie znajduje się głowa gracza
         var head_offset = $XROrigin3D/XRCamera3D.global_position - $XROrigin3D.global_position
-        head_offset.y = 0
+        head_offset.y = 0 # Ignorujemy wysokość (chcemy przesuwać się w płaszczyźnie podłogi)
         
+        # Ustawiamy nową pozycję gracza z uwzględnieniem offsetu
         $XROrigin3D.global_position = target_pos - head_offset
 
 # Nowe zmienne konfiguracyjne
@@ -106,30 +111,39 @@ func _process(delta: float) -> void:
     var left_joy = $XROrigin3D/LeftController.get_vector2(\"thumbstick\")
     var right_joy = $XROrigin3D/RightController.get_vector2(\"thumbstick\")
 
+    # --- RUCH PŁYNNY (Lewy joystick) ---
     if left_joy.length() > 0.1:
+        # Pobieramy orientację głowy gracza
         var cam_basis = $XROrigin3D/XRCamera3D.global_transform.basis
         
+        # Wektor do przodu (blokujemy wysokość, czyli płaszczyzna XZ)
         var forward = -cam_basis.z
         forward.y = 0
         forward = forward.normalized()
 
+        # Wektor w bok
         var right = cam_basis.x
         right.y = 0
         right = right.normalized()
 
+        # W joystickach zazwyczaj Y < 0 to wychylenie w górę, stąd minus przy left_joy.y
         var move_dir = (forward * -left_joy.y) + (right * left_joy.x)
         
+        # Brak przyspieszenia - po prostu przemieszczamy punkt odniesienia
         $XROrigin3D.global_position += move_dir * move_speed * delta
 
-
+    # --- OBRÓT SKOKOWY (Prawy joystick) ---
     if abs(right_joy.x) > 0.5:
         if can_snap_turn:
+            # Obrót w lewo lub prawo
             var turn_dir = -1 if right_joy.x > 0 else 1
             $XROrigin3D.rotate_y(turn_dir * snap_angle)
-            can_snap_turn = false
+            can_snap_turn = false # Blokada ciągłego obrotu
     elif abs(right_joy.x) < 0.2:
+        # Puszczenie joysticka resetuje blokadę
         can_snap_turn = true
 
+    # --- ZNACZNIK TELEPORTU ---
     var raycast = $XROrigin3D/RightController/RayCast3D
     if raycast.is_colliding():
         $TeleportMarker.global_position = raycast.get_collision_point()
